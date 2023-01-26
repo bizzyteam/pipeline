@@ -1,0 +1,308 @@
+name: "Bizzy CI"
+description: "The Bizzy CI builds a Docker image running scanning, updates the CHANGELOG.md file and creates a semver version"
+inputs:
+  app-name:
+    description: 'Application Name'
+    required: true
+  app-env:
+    description: 'Application Environment (prod / staging)'
+  github-token:
+    description: 'GitHub Token with repo scope (to checkout the ci-cd repo)'
+    required: true
+  docker-repository:
+    description: 'Docker Repository where we will store the image'
+    required: true
+  docker-username:
+    description: 'Docker Registry Username'
+    required: true
+  docker-password:
+    description: 'Docker Registry Password'
+    required: true
+  github-robot-user:
+    description: 'GitHub Robot Username'
+    required: true
+  github-robot-email:
+    description: 'GitHub Robot Email'
+    required: true
+  argocd-repo-ssh-key:
+    description: 'SSH Private Key allowed to clone the ArgoCD repo'
+    required: true
+  argocd-repo:
+    description: 'Git Repo storing ArgoCD manifests'
+  argocd-values-file:
+    description: 'ArgoCD Values File to update (keep empty to skip the CD part)'
+    required: false
+    default: ''
+  argocd-image-tag:
+    description: 'ArgoCD Values File yaml path to key containing the docker image tag to update'
+    required: true
+    default: '.image.tag'
+  code-directory:
+    description: 'Code directory'
+    required: true
+    default: '.'
+  dockerfile-name:
+    description: 'Dockerfile name'
+    required: true
+    default: 'Dockerfile'
+  docker-prebuild-commands:
+    description: 'Commands to execute before docker build (like setting environment variables)'
+    required: false
+    default: ''
+  docker-build-args:
+    description: 'Docker build args to use during the docker build (eg: --build-arg VAR1=VALUE1 --build-arg VAR2=value2'
+    required: false
+    default: ''
+  forced-version:
+    description: 'If provided, it sets this version (instead of trying to calculate the next version)'
+    required: false
+    default: ''
+  slack-webhook-url:
+    description: 'Slack Webhook URL to send notifications'
+    required: false
+    default: ''
+
+# NOTE: Don't use set-output, it's deprecated: https://github.blog/changelog/2022-10-11-github-actions-deprecating-save-state-and-set-output-commands/
+#       Instead we use environment variables: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#environment-files
+runs:
+  using: "composite"
+
+  steps:
+    - name: Post start to Slack
+      if: ${{ inputs.slack-webhook-url }}
+      id: slack_start
+      uses: slackapi/slack-github-action@v1.21.0
+      env:
+        SLACK_WEBHOOK_URL: ${{ inputs.slack-webhook-url }}
+      with:
+        payload: |
+          {
+            "message": "Build started for ${{ inputs.app-name }} ${{ inputs.app-env }} :loading:",
+            "commit_url": "${{ github.event.head_commit.url }}",
+            "job_status": "STARTED",
+            "user": "${{ github.actor }}"
+          }
+
+    - name: Set patch release
+      shell: bash
+      if: ${{ contains(github.event.*.labels.*.name, 'release-patch') }}
+      run: echo "RELEASE=patch" >> $GITHUB_ENV
+
+    - name: Set minor release
+      shell: bash
+      if: ${{ contains(github.event.*.labels.*.name, 'release-minor') }}
+      run: echo "RELEASE=minor" >> $GITHUB_ENV
+
+    - name: Set major release
+      shell: bash
+      if: ${{ contains(github.event.*.labels.*.name, 'release-major') }}
+      run: echo "RELEASE=major" >> $GITHUB_ENV
+
+    - name: Check if we need to use default
+      if: ${{ inputs.app-env == 'production' }}
+      shell: bash
+      run: |
+        if [[ -z "${{ env.RELEASE }}" ]];
+        then
+          echo "No labels were added to the PR, setting 'patch' version by default"
+          echo "RELEASE=patch" >> $GITHUB_ENV
+        fi
+
+    # We checkout this repo using the PAT of the user that can skip the main branch protection rule. 
+    # We persist these credentials so they are available in the next steps to make a commit against main branch directly.
+    - uses: actions/checkout@v3
+      with:
+        token: ${{ inputs.github-token }}
+        persist-credentials: true
+        fetch-depth: 0 # Required due to the way Git works, without it this action won't be able to find any or the correct tags
+
+    # Please run this action after the actions/checkout action
+    - name: Check for plain credentials
+      uses: ShiftLeftSecurity/scan-action@master
+      with:
+        output: /tmp/reports
+
+    - name: 'Get Previous tag'
+      if: ${{ inputs.app-env == 'production' }}
+      shell: bash
+      run: |
+          PREVIOUS_TAG=$(git tag --list 'v*.*.*' --sort=-version:refname | head -n 1)
+          if [ "$PREVIOUS_TAG" == "" ]; then
+               PREVIOUS_TAG="v0.0.0"
+          fi
+          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_ENV
+
+    - name: Install semver tool
+      if: ${{ inputs.app-env == 'production' }}
+      shell: bash
+      run: |
+          wget -O /usr/local/bin/semver \
+              https://raw.githubusercontent.com/fsaintjacques/semver-tool/master/src/semver
+          chmod +x /usr/local/bin/semver
+
+    - name: Set forced version if provided
+      if: ${{ inputs.forced-version }}
+      shell: bash
+      run: |
+        NEW_VERSION=${{ inputs.forced-version }}
+        echo "New version is $NEW_VERSION"
+        echo "new_version=$NEW_VERSION" >> $GITHUB_ENV
+
+    - name: Calculate next version if no forced version was provided
+      if: ${{ ! inputs.forced-version }}
+      id: newtag
+      shell: bash
+      run: |
+        if [ "${{ inputs.app-env }}" == "production" ]; then
+          # For production versions, let's generate the next semver version
+          CURRENT_VERSION=${{ env.previous_tag }}
+          echo "Current version is $CURRENT_VERSION"
+          NEW_VERSION=$(semver bump ${{ env.RELEASE }} $CURRENT_VERSION)
+          NEW_VERSION="v${NEW_VERSION}"
+        else
+          # This is a non-production version, just use the commit hash
+          NEW_VERSION=$GITHUB_SHA
+        fi
+        echo "New version is $NEW_VERSION"
+        echo "new_version=$NEW_VERSION" >> $GITHUB_ENV
+
+    - name: Get current date
+      if: ${{ inputs.app-env == 'production' }}
+      id: date
+      shell: bash
+      run: |
+        CURRENT_DATE=$(date +'%Y-%m-%d')
+        echo "current_date=$CURRENT_DATE" >> $GITHUB_ENV
+
+    - name: Update changelog
+      if: ${{ inputs.app-env == 'production' }}
+      id: update-changelog
+      shell: bash
+      env:
+        NEW_VERSION: "${{ env.new_version }}"
+        VERSION_DATE: "${{ env.current_date }}"
+      run: |
+        cd $GITHUB_WORKSPACE
+        # Please select an user excluded in the branch protection rule
+        git config user.name ${{ inputs.github-robot-user }}
+        git config user.email ${{ inputs.github-robot-email }}
+        git fetch
+        CURRENT_BRANCH=$(git branch --show-current)
+        git pull origin $CURRENT_BRANCH
+        # The Pull Request body was populated with the content of pull_request_template.md (and edited)
+        # Only extract the text below the line containing the word CHANGELOG
+        echo "${{ github.event.pull_request.body }}" > pull-request-body.txt
+        if [ -s pull-request-body.txt ]; then
+          CHANGELOG_LINE_NUMBER=$(grep -n "## CHANGELOG" pull-request-body.txt | cut -d ":" -f 1 | head -n 1 | tr -d "\n")
+          if [ "$CHANGELOG_LINE_NUMBER" == "" ]; then
+            echo "WARNING: No word CHANGELOG was found in PR body"
+            exit 0
+          fi
+          FIRST_LINE_NUMBER=$((CHANGELOG_LINE_NUMBER+1))
+          CHANGELOG_BODY=`tail --lines=+${FIRST_LINE_NUMBER} pull-request-body.txt`
+          # Latest version should be injected on top of CHANGELOG (after header)
+          cat CHANGELOG.md | head -n 7 > CHANGELOG.new
+          echo "## [$NEW_VERSION] - $VERSION_DATE" >> CHANGELOG.new
+          echo "$CHANGELOG_BODY" >> CHANGELOG.new
+          tail --lines=+8 CHANGELOG.md >> CHANGELOG.new
+          mv CHANGELOG.new CHANGELOG.md
+          git add CHANGELOG.md
+          git commit -m "Updating CHANGELOG.md for $NEW_VERSION"
+          git push
+        fi
+
+    # Create a new GitHub Release
+    - name: Create new GitHub release
+      if: ${{ inputs.app-env == 'production' }}
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        # This token is provided by Actions, you don't need to create a new secret
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      with:
+        tag_name: "${{ env.new_version }}"
+        release_name: "Release ${{ env.new_version }}"
+        body: |
+          See CHANGELOG.md file for details
+        draft: false
+        prerelease: false
+
+    # Docker Login
+    - name: Docker Login
+      uses: docker/login-action@v1.8.0
+      with:
+        username: ${{ inputs.docker-username }}
+        password: ${{ inputs.docker-password }}
+        logout: false
+
+    # Build Docker Image
+    - name: Build Docker Image
+      shell: bash
+      run: |
+        ${{ inputs.docker-prebuild-commands }}
+
+        docker build -t ${{ inputs.docker-repository }}:${{ env.new_version }} ${{ inputs.docker-build-args }} -f ${{ inputs.dockerfile-name }} ${{ inputs.code-directory }}
+
+        docker push ${{ inputs.docker-repository }}:${{ env.new_version }}
+
+    # We checkout the repo using the PAT of the user that can skip the main branch protection rule. 
+    # We persist these credentials so they are available in the next steps to make a commit against main branch directly.
+    - uses: actions/checkout@v3
+      with:
+        repository: ${{ inputs.argocd-repo }}
+        ssh-key: ${{ inputs.argocd-repo-ssh-key }}
+        ref: "main"
+        token: ${{ inputs.github-token }}
+        persist-credentials: true
+        fetch-depth: 0 # Required due to the way Git works, without it this action won't be able to find any or the correct tags
+
+    - name: Install yq
+      shell: bash
+      run: |
+        sudo wget -O /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.9.3/yq_linux_amd64
+        sudo chmod +x /usr/local/bin/yq
+
+    - name: Update ArgoCD values file
+      if: ${{ inputs.argocd-values-file }}
+      shell: bash
+      env:
+        NEW_VERSION: "${{ env.new_version }}"
+      run: |
+        yq eval -i "${{ inputs.argocd-image-tag }} = \"$NEW_VERSION\"" ${{ inputs.argocd-values-file }}
+        head ${{ inputs.argocd-values-file }}
+
+        git config user.name ${{ inputs.github-robot-user }}
+        git config user.email ${{ inputs.github-robot-email }}
+        git add ${{ inputs.argocd-values-file }}
+        git commit -m "Upgrading ${{ inputs.app-name }} ${{ inputs.app-env }} to $NEW_VERSION"
+        git push
+
+    - name: Post success to Slack
+      if: ${{ inputs.slack-webhook-url }}
+      id: slack_success
+      uses: slackapi/slack-github-action@v1.21.0
+      env:
+        SLACK_WEBHOOK_URL: ${{ inputs.slack-webhook-url }}
+      with:
+        payload: |
+          {
+            "message": "Build succeeded for ${{ inputs.app-name }} ${{ inputs.app-env }}, version is ${{ env.new_version }} :partyrocket:",
+            "commit_url": "${{ github.event.head_commit.url }}",
+            "job_status": "SUCCESS",
+            "user": "${{ github.actor }}"
+          }
+
+    - name: Post failure to Slack
+      if: ${{ inputs.slack-webhook-url && failure() }}
+      id: slack_failure
+      uses: slackapi/slack-github-action@v1.21.0
+      env:
+        SLACK_WEBHOOK_URL: ${{ inputs.slack-webhook-url }}
+      with:
+        payload: |
+          {
+            "message": "Build failed for ${{ inputs.app-name }} ${{ inputs.app-env }} :fail:",
+            "commit_url": "${{ github.event.head_commit.url }}",
+            "job_status": "FAILURE",
+            "user": "${{ github.actor }}"
+          }
