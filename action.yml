@@ -9,6 +9,9 @@ inputs:
   github-token:
     description: 'GitHub Token with repo scope (to checkout the ci-cd repo)'
     required: true
+  docker-registry:
+    description: 'Docker Registry'
+    required: true
   docker-repository:
     description: 'Docker Repository where we will store the image'
     required: true
@@ -231,6 +234,7 @@ runs:
     - name: Docker Login
       uses: docker/login-action@v1.8.0
       with:
+        registry: ${{ inputs.docker-registry }}
         username: ${{ inputs.docker-username }}
         password: ${{ inputs.docker-password }}
         logout: false
@@ -241,9 +245,9 @@ runs:
       run: |
         ${{ inputs.docker-prebuild-commands }}
 
-        docker build -t ${{ inputs.docker-repository }}:${{ env.new_version }} ${{ inputs.docker-build-args }} -f ${{ inputs.dockerfile-name }} ${{ inputs.code-directory }}
+        docker build -t ${{ inputs.docker-registry }}/${{ inputs.docker-repository }}:${{ env.new_version }} ${{ inputs.docker-build-args }} -f ${{ inputs.dockerfile-name }} ${{ inputs.code-directory }}
 
-        docker push ${{ inputs.docker-repository }}:${{ env.new_version }}
+        docker push ${{ inputs.docker-registry }}/${{ inputs.docker-repository }}:${{ env.new_version }}
 
     # We checkout the repo using the PAT of the user that can skip the main branch protection rule. 
     # We persist these credentials so they are available in the next steps to make a commit against main branch directly.
