@@ -5,10 +5,7 @@ inputs:
     description: 'Application Name'
     required: true
   app-env:
-    description: 'Application Environment (prod / staging)'
-  github-token:
-    description: 'GitHub Token with repo scope (to checkout the ci-cd repo)'
-    required: true
+    description: 'Application Environment (prod / test)'
   docker-registry:
     description: 'Docker Registry'
     required: true
@@ -26,6 +23,9 @@ inputs:
     required: true
   github-robot-email:
     description: 'GitHub Robot Email'
+    required: true
+  github-robot-token:
+    description: 'GitHub Robot Token'
     required: true
   argocd-repo-ssh-key:
     description: 'SSH Private Key allowed to clone the ArgoCD repo'
@@ -115,7 +115,7 @@ runs:
     # We persist these credentials so they are available in the next steps to make a commit against main branch directly.
     - uses: actions/checkout@v3
       with:
-        token: ${{ inputs.github-token }}
+        token: ${{ inputs.github-robot-token }}
         persist-credentials: true
         fetch-depth: 0 # Required due to the way Git works, without it this action won't be able to find any or the correct tags
 
@@ -221,7 +221,7 @@ runs:
       uses: actions/create-release@v1
       env:
         # This token is provided by Actions, you don't need to create a new secret
-        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITHUB_TOKEN: ${{ inputs.github-robot-token }}
       with:
         tag_name: "${{ env.new_version }}"
         release_name: "Release ${{ env.new_version }}"
@@ -256,7 +256,7 @@ runs:
         repository: ${{ inputs.argocd-repo }}
         ssh-key: ${{ inputs.argocd-repo-ssh-key }}
         ref: "main"
-        token: ${{ inputs.github-token }}
+        token: ${{ inputs.github-robot-token }}
         persist-credentials: true
         fetch-depth: 0 # Required due to the way Git works, without it this action won't be able to find any or the correct tags
 
