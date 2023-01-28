@@ -51,37 +51,41 @@ NOTE: For details see [this documentation](https://docs.github.com/en/developers
 
 ## Usage
 
-On a different repo create a file named (for example) `.github/workflows/pipeline.yaml`
+On a different repo create a file named (for example) `.github/workflows/ci-prod.yaml`
 
 ```
-name: deploy-production
+name: copyshop-prod
 
 on:
-  pull_request:
+  push:
     branches:
-      - main
-    types:
-      - closed
+      - "main"
 
 jobs:
   build:
-    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
-      # Bizzy CI/CD Action
+      # Bizzy CI/CD Action 
       - name: Run CI/CD composite action
-        uses: BizzyTeam/pipeline@main
+        uses: byzzyteam/pipeline@main
         with:
-          app-name: "backend"
-          app-env: "production"
-          docker-repository: "bizzy/backend"
-          argocd-values-file: "charts/backend/values.yaml"
+          # Application and environment
+          app-name: "copyshop"
+          app-env: "prod"
 
-          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          docker-username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          docker-password: ${{ secrets.DOCKER_HUB_PASSWORD }}
-          argocd-repo-ssh-key: ${{ secrets.REPO_ARGO_TEST_SSHKEY }}
-          slack-webhook-url: '' # No slack webhook created for prod yet
+          # Docker registry, repo and credentials
+          docker-registry: "xxxxxxxxxxxxxx.dkr.ecr.us-east-1.amazonaws.com"
+          docker-repository: "copyshop"
+          docker-username: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          docker-password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+          # ArgoCD repo and values file
+          argocd-repo: "bizzyteam/argo-prod"
+          argocd-values-file: "charts/copyshop/values.yaml"
+          argocd-repo-ssh-key: ${{ secrets.REPO_ARGO_PROD_SSHKEY }}
+
+          # GitHub account to write commits
+          github-robot-user: leandrok
+          github-robot-email: leandro.anthonioz@gmail.com
+          github-robot-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 ```
-
-NOTE: If you use ECR, the docker-username and docker-password are your [IAM keys](https://github.com/docker/login-action#aws-elastic-container-registry-ecr)
