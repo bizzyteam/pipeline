@@ -74,7 +74,7 @@ runs:
     - name: Set application environment name
       shell: bash
       run: |
-        if [ "${{ inputs.for-prod }}" ]; then
+        if [ "${{ inputs.for-prod }}" == "true" ]; then
             echo "ENV_NAME=production" >> $GITHUB_ENV
         else
             echo "ENV_NAME=testing" >> $GITHUB_ENV
@@ -165,7 +165,7 @@ runs:
       id: newtag
       shell: bash
       run: |
-        if [ "${{ inputs.for-prod }}" ]; then
+        if [ "${{ inputs.for-prod }}" == "true" ]; then
           # For production versions, let's generate the next semver version
           CURRENT_VERSION=${{ env.previous_tag }}
           echo "Current version is $CURRENT_VERSION"
