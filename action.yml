@@ -111,7 +111,7 @@ runs:
       run: echo "RELEASE=major" >> $GITHUB_ENV
 
     - name: Check if we need to use default
-      if: ${{ inputs.for-prod }}
+      if: ${{ inputs.for-prod == 'true' }}
       shell: bash
       run: |
         if [[ -z "${{ env.RELEASE }}" ]];
@@ -135,7 +135,7 @@ runs:
         output: /tmp/reports
 
     - name: 'Get Previous tag'
-      if: ${{ inputs.for-prod }}
+      if: ${{ inputs.for-prod == 'true' }}
       shell: bash
       run: |
           PREVIOUS_TAG=$(git tag --list 'v*.*.*' --sort=-version:refname | head -n 1)
@@ -145,7 +145,7 @@ runs:
           echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_ENV
 
     - name: Install semver tool
-      if: ${{ inputs.for-prod }}
+      if: ${{ inputs.for-prod == 'true' }}
       shell: bash
       run: |
           wget -O /usr/local/bin/semver \
@@ -179,7 +179,7 @@ runs:
         echo "new_version=$NEW_VERSION" >> $GITHUB_ENV
 
     - name: Get current date
-      if: ${{ inputs.for-prod }}
+      if: ${{ inputs.for-prod == 'true' }}
       id: date
       shell: bash
       run: |
@@ -187,7 +187,7 @@ runs:
         echo "current_date=$CURRENT_DATE" >> $GITHUB_ENV
 
     - name: Update changelog
-      if: ${{ inputs.for-prod }}
+      if: ${{ inputs.for-prod == 'true' }}
       id: update-changelog
       shell: bash
       env:
@@ -225,7 +225,7 @@ runs:
 
     # Create a new GitHub Release
     - name: Create new GitHub release
-      if: ${{ inputs.for-prod }}
+      if: ${{ inputs.for-prod == 'true' }}
       id: create_release
       uses: actions/create-release@v1
       env:
