@@ -4,8 +4,8 @@ inputs:
   app-name:
     description: 'Application Name'
     required: true
-  app-env:
-    description: 'Application Environment (prod / test)'
+  for-prod:
+    description: 'Pipeline for Production (true/false)'
   docker-registry:
     description: 'Docker Registry'
     required: true
@@ -71,6 +71,15 @@ runs:
   using: "composite"
 
   steps:
+    - name: Set application environment name
+      shell: bash
+      run: |
+        if [ "${{ inputs.for-prod }}" ]; then
+            echo "ENV_NAME=production" >> $GITHUB_ENV
+        else
+            echo "ENV_NAME=testing" >> $GITHUB_ENV
+        fi
+
     - name: Post start to Slack
       if: ${{ inputs.slack-webhook-url }}
       id: slack_start
@@ -80,7 +89,7 @@ runs:
       with:
         payload: |
           {
-            "message": "Build started for ${{ inputs.app-name }} ${{ inputs.app-env }} :loading:",
+            "message": "Build started for ${{ inputs.app-name }} ${{ env.ENV_NAME }} :loading:",
             "commit_url": "${{ github.event.head_commit.url }}",
             "job_status": "STARTED",
             "user": "${{ github.actor }}"
@@ -102,7 +111,7 @@ runs:
       run: echo "RELEASE=major" >> $GITHUB_ENV
 
     - name: Check if we need to use default
-      if: ${{ inputs.app-env == 'production' }}
+      if: ${{ inputs.for-prod }}
       shell: bash
       run: |
         if [[ -z "${{ env.RELEASE }}" ]];
@@ -126,7 +135,7 @@ runs:
         output: /tmp/reports
 
     - name: 'Get Previous tag'
-      if: ${{ inputs.app-env == 'production' }}
+      if: ${{ inputs.for-prod }}
       shell: bash
       run: |
           PREVIOUS_TAG=$(git tag --list 'v*.*.*' --sort=-version:refname | head -n 1)
@@ -136,7 +145,7 @@ runs:
           echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_ENV
 
     - name: Install semver tool
-      if: ${{ inputs.app-env == 'production' }}
+      if: ${{ inputs.for-prod }}
       shell: bash
       run: |
           wget -O /usr/local/bin/semver \
@@ -156,7 +165,7 @@ runs:
       id: newtag
       shell: bash
       run: |
-        if [ "${{ inputs.app-env }}" == "production" ]; then
+        if [ "${{ inputs.for-prod }}" ]; then
           # For production versions, let's generate the next semver version
           CURRENT_VERSION=${{ env.previous_tag }}
           echo "Current version is $CURRENT_VERSION"
@@ -170,7 +179,7 @@ runs:
         echo "new_version=$NEW_VERSION" >> $GITHUB_ENV
 
     - name: Get current date
-      if: ${{ inputs.app-env == 'production' }}
+      if: ${{ inputs.for-prod }}
       id: date
       shell: bash
       run: |
@@ -178,7 +187,7 @@ runs:
         echo "current_date=$CURRENT_DATE" >> $GITHUB_ENV
 
     - name: Update changelog
-      if: ${{ inputs.app-env == 'production' }}
+      if: ${{ inputs.for-prod }}
       id: update-changelog
       shell: bash
       env:
@@ -216,7 +225,7 @@ runs:
 
     # Create a new GitHub Release
     - name: Create new GitHub release
-      if: ${{ inputs.app-env == 'production' }}
+      if: ${{ inputs.for-prod }}
       id: create_release
       uses: actions/create-release@v1
       env:
@@ -278,7 +287,7 @@ runs:
         git config user.name ${{ inputs.github-robot-user }}
         git config user.email ${{ inputs.github-robot-email }}
         git add ${{ inputs.argocd-values-file }}
-        git commit -m "Upgrading ${{ inputs.app-name }} ${{ inputs.app-env }} to $NEW_VERSION"
+        git commit -m "Upgrading ${{ inputs.app-name }} ${{ env.ENV_NAME }} to $NEW_VERSION"
         git push
 
     - name: Post success to Slack
@@ -290,7 +299,7 @@ runs:
       with:
         payload: |
           {
-            "message": "Build succeeded for ${{ inputs.app-name }} ${{ inputs.app-env }}, version is ${{ env.new_version }} :partyrocket:",
+            "message": "Build succeeded for ${{ inputs.app-name }} ${{ env.ENV_NAME }}, version is ${{ env.new_version }} :partyrocket:",
             "commit_url": "${{ github.event.head_commit.url }}",
             "job_status": "SUCCESS",
             "user": "${{ github.actor }}"
@@ -305,7 +314,7 @@ runs:
       with:
         payload: |
           {
-            "message": "Build failed for ${{ inputs.app-name }} ${{ inputs.app-env }} :fail:",
+            "message": "Build failed for ${{ inputs.app-name }} ${{ env.ENV_NAME }} :fail:",
             "commit_url": "${{ github.event.head_commit.url }}",
             "job_status": "FAILURE",
             "user": "${{ github.actor }}"
