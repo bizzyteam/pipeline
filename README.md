@@ -49,17 +49,64 @@ Please set Expiration to Never.
 
 NOTE: For details see [this documentation](https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps)
 
-## Usage
+## Production pipeline
 
-On a different repo create a file named (for example) `.github/workflows/ci-prod.yaml`
+On the repo where the production pipeline should be executed create a file named (for example) `.github/workflows/ci-prod.yaml`
 
 ```
-name: copyshop-prod
+name: ci-prod
 
+# Runs when a PR is closed on main branch
+on:
+  pull_request:
+    branches:
+      - main  
+    types:
+      - closed
+
+jobs:
+  build:
+    # PR should also be merged (not only closed)
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      # Bizzy CI/CD Action 
+      - name: Run CI/CD composite action
+        uses: bizzyteam/pipeline@main
+        with:
+          # Application and environment
+          app-name: "application-name"
+          for-prod: true
+
+          # Docker registry, repo and credentials
+          docker-registry: "ghcr.io"
+          docker-repository: "organization/your-repo"
+          docker-username: ${{ github.actor }}
+          docker-password: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+          # ArgoCD repo and values file
+          argocd-repo: "organization/argo-repo"
+          argocd-values-file: "path/to/prod-values.yaml"
+          argocd-repo-ssh-key: ${{ secrets.REPO_ARGO_PROD_SSHKEY }}
+
+          # GitHub account to write commits
+          github-robot-user: github-robot
+          github-robot-email: github-email
+          github-robot-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+```
+
+## Testing pipeline
+
+On the repo where the production pipeline should be executed create a file named (for example) `.github/workflows/ci-test.yaml`
+
+```
+name: ci-test
+
+# Runs when a commit is pushed to develop
 on:
   push:
     branches:
-      - "main"
+      - develop 
 
 jobs:
   build:
@@ -67,25 +114,25 @@ jobs:
     steps:
       # Bizzy CI/CD Action 
       - name: Run CI/CD composite action
-        uses: byzzyteam/pipeline@main
+        uses: bizzyteam/pipeline@main
         with:
           # Application and environment
-          app-name: "copyshop"
-          app-env: "prod"
+          app-name: "application-name"
+          for-prod: false
 
           # Docker registry, repo and credentials
-          docker-registry: "xxxxxxxxxxxxxx.dkr.ecr.us-east-1.amazonaws.com"
-          docker-repository: "copyshop"
-          docker-username: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          docker-password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          docker-registry: "ghcr.io"
+          docker-repository: "organization/your-repo"
+          docker-username: ${{ github.actor }}
+          docker-password: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
           # ArgoCD repo and values file
-          argocd-repo: "bizzyteam/argo-prod"
-          argocd-values-file: "charts/copyshop/values.yaml"
-          argocd-repo-ssh-key: ${{ secrets.REPO_ARGO_PROD_SSHKEY }}
+          argocd-repo: "organization/argo-repo"
+          argocd-values-file: "path/to/test-values.yaml"
+          argocd-repo-ssh-key: ${{ secrets.REPO_ARGO_TEST_SSHKEY }}
 
           # GitHub account to write commits
-          github-robot-user: leandrok
-          github-robot-email: leandro.anthonioz@gmail.com
+          github-robot-user: github-robot
+          github-robot-email: github-email
           github-robot-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 ```
