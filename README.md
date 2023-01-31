@@ -26,11 +26,27 @@ It's possible to set repositories as [Internal](https://dev.to/n3wt0n/finally-cu
 
 ## Client Repo Configuration
 
-Add the following labels to the client repo (the repo that uses this action):
+Visit the labels page of the repo (https://github.com/organization/repo-name/labels)
 
-- release-major
-- release-minor
-- release-patch
+Add the following 3 labels to the repo that will run this action:
+
+```
+Name: release-major
+Description: Increases 9.x.x version
+Color: red #E0022F
+```
+
+```
+Name: release-minor
+Description: Increases x.9.x version
+Color: yellow #E6E826
+```
+
+```
+Name: release-patch
+Description: Increases x.x.9 version
+Color: green #33E224
+```
 
 These labels can be used to tag a Pull Request before merging it into main branch so we can choose how to increase the semantic version
 
@@ -51,7 +67,7 @@ NOTE: For details see [this documentation](https://docs.github.com/en/developers
 
 ## Production pipeline
 
-On the repo where the production pipeline should be executed create a file named (for example) `.github/workflows/ci-prod.yaml`
+On the repo where the pipeline should be executed create a file named (for example) `.github/workflows/ci-prod.yaml`
 
 ```
 name: ci-prod
@@ -95,9 +111,9 @@ jobs:
           github-robot-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 ```
 
-## Testing pipeline
+## Staging pipeline
 
-On the repo where the production pipeline should be executed create a file named (for example) `.github/workflows/ci-test.yaml`
+On the repo where the pipeline should be executed create a file named (for example) `.github/workflows/ci-test.yaml`
 
 ```
 name: ci-test
