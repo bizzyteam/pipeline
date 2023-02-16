@@ -83,16 +83,22 @@ runs:
     - name: Post start to Slack
       if: ${{ inputs.slack-webhook-url }}
       id: slack_start
-      uses: slackapi/slack-github-action@v1.21.0
+      uses: slackapi/slack-github-action@v1.23.0
       env:
         SLACK_WEBHOOK_URL: ${{ inputs.slack-webhook-url }}
       with:
         payload: |
           {
-            "message": "Build started for ${{ inputs.app-name }} ${{ env.ENV_NAME }} :loading:",
-            "commit_url": "${{ github.event.head_commit.url }}",
-            "job_status": "STARTED",
-            "user": "${{ github.actor }}"
+            "text": "Build started for ${{ inputs.app-name }} ${{ env.ENV_NAME }} :loading:",
+            "blocks": [
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "Build started for ${{ inputs.app-name }} ${{ env.ENV_NAME }}: ${{ job.status }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
+                }
+              }
+            ]
           }
 
     - name: Set patch release
@@ -293,29 +299,41 @@ runs:
     - name: Post success to Slack
       if: ${{ inputs.slack-webhook-url }}
       id: slack_success
-      uses: slackapi/slack-github-action@v1.21.0
+      uses: slackapi/slack-github-action@v1.23.0
       env:
         SLACK_WEBHOOK_URL: ${{ inputs.slack-webhook-url }}
       with:
         payload: |
           {
-            "message": "Build succeeded for ${{ inputs.app-name }} ${{ env.ENV_NAME }}, version is ${{ env.new_version }} :partyrocket:",
-            "commit_url": "${{ github.event.head_commit.url }}",
-            "job_status": "SUCCESS",
-            "user": "${{ github.actor }}"
+            "text": "Build succeeded for ${{ inputs.app-name }} ${{ env.ENV_NAME }} :partyrocket:",
+            "blocks": [
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "Build succeeded for ${{ inputs.app-name }} ${{ env.ENV_NAME }}: ${{ job.status }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
+                }
+              }
+            ]
           }
 
     - name: Post failure to Slack
       if: ${{ inputs.slack-webhook-url && failure() }}
       id: slack_failure
-      uses: slackapi/slack-github-action@v1.21.0
+      uses: slackapi/slack-github-action@v1.23.0
       env:
         SLACK_WEBHOOK_URL: ${{ inputs.slack-webhook-url }}
       with:
         payload: |
           {
-            "message": "Build failed for ${{ inputs.app-name }} ${{ env.ENV_NAME }} :fail:",
-            "commit_url": "${{ github.event.head_commit.url }}",
-            "job_status": "FAILURE",
-            "user": "${{ github.actor }}"
+            "text": "Build failed for ${{ inputs.app-name }} ${{ env.ENV_NAME }} :fail:",
+            "blocks": [
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "Build finished for ${{ inputs.app-name }} ${{ env.ENV_NAME }}: ${{ job.status }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
+                }
+              }
+            ]
           }
