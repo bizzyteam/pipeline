@@ -89,7 +89,7 @@ runs:
       with:
         payload: |
           {
-            "text": "Build started for ${{ inputs.app-name }} ${{ env.ENV_NAME }}",
+            "text": "${{ inputs.app-name }} ${{ env.ENV_NAME }} build started ...",
             "blocks": [
               {
                 "type": "section",
