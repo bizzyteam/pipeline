@@ -89,7 +89,7 @@ runs:
       with:
         payload: |
           {
-            "text": "Build started for ${{ inputs.app-name }} ${{ env.ENV_NAME }} :loading:",
+            "text": "Build started for ${{ inputs.app-name }} ${{ env.ENV_NAME }}",
             "blocks": [
               {
                 "type": "section",
@@ -305,7 +305,7 @@ runs:
       with:
         payload: |
           {
-            "text": "Build succeeded for ${{ inputs.app-name }} ${{ env.ENV_NAME }} :partyrocket:",
+            "text": "${{ inputs.app-name }} ${{ env.ENV_NAME }} build finished: success",
             "blocks": [
               {
                 "type": "section",
@@ -326,7 +326,7 @@ runs:
       with:
         payload: |
           {
-            "text": "Build failed for ${{ inputs.app-name }} ${{ env.ENV_NAME }} :fail:",
+            "text": "${{ inputs.app-name }} ${{ env.ENV_NAME }} build finished: FAILED",
             "blocks": [
               {
                 "type": "section",
